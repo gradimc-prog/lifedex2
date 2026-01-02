@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>LifeDex</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- React + ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background: radial-gradient(#0b1220, #05080f);
+      font-family: system-ui, sans-serif;
+      color: white;
+    }
+    #root {
+      max-width: 420px;
+      margin: auto;
+      padding: 20px;
+    }
+    h1 { font-size: 32px; margin-bottom: 4px; }
+    .undo {
+      background: gold;
+      padding: 12px 20px;
+      border-radius: 30px;
+      border: none;
+      margin: 12px 0;
+      font-weight: bold;
+    }
+    .dex {
+      background: linear-gradient(180deg,#101827,#05080f);
+      border-radius: 18px;
+      padding: 16px;
+      margin: 16px 0;
+      animation: slideUp .35s ease;
+    }
+    .bar {
+      background: #222;
+      border-radius: 10px;
+      height: 8px;
+      overflow: hidden;
+      margin: 8px 0;
+    }
+    .fill {
+      height: 100%;
+      background: linear-gradient(90deg,#00ff88,#00bbff);
+      transition: width .3s ease;
+    }
+    button {
+      background: orange;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 20px;
+      font-weight: bold;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: none;
+      margin-top: 6px;
+    }
+    .danger { background: red; color: white; }
+    .actions { display: flex; gap: 10px; margin-top: 20px; }
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0 }
+      to { transform: translateY(0); opacity: 1 }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+
+    const clickSound = new Audio("https://assets.mixkit.co/sfx/preview/mixkit-game-click-1114.mp3");
+    const xpSound = new Audio("https://assets.mixkit.co/sfx/preview/mixkit-achievement-bell-600.mp3");
+    const LEVELS = ["Beginner","Practitioner","Advanced","Expert","Master"];
+
+    function App() {
+      const [dexes, setDexes] = React.useState(() => {
+        const saved = localStorage.getItem("lifedex_single");
+        return saved ? JSON.parse(saved) : [
+          { id: 1, name: "LifeDoc", type: "Skill", xp: 95, moments: [] },
+          { id: 2, name: "BlueCollar Trades", type: "Career", xp: 20, moments: [] },
+          { id: 3, name: "Reliability", type: "Trait", xp: 40, moments: [] },
+          { id: 4, name: "Artistry", type: "Hobby", xp: 5, moments: [] }
+        ];
+      });
+
+      const [history, setHistory] = React.useState([]);
+
+      React.useEffect(() => {
+        localStorage.setItem("lifedex_single", JSON.stringify(dexes));
+      }, [dexes]);
+
+      const snapshot = () =>
+        setHistory(h => [...h, JSON.parse(JSON.stringify(dexes))]);
+
+      const addXP = (id, amount, note) => {
+        snapshot();
+        xpSound.play();
+        setDexes(d =>
+          d.map(x =>
+            x.id === id
+              ? { ...x, xp: Math.max(0, x.xp + amount),
+                  moments: note ? [...x.moments, note] : x.moments }
+              : x
+          )
+        );
+      };
+
+      const undo = () => {
+        if (!history.length) return;
+        clickSound.play();
+        setDexes(history.at(-1));
+        setHistory(h => h.slice(0, -1));
+      };
+
+      return (
+        <>
+          <h1>LifeDex</h1>
+          <p>Your life, indexed.</p>
+
+          <button className="undo" onClick={undo}>↩ Undo Last Action</button>
+
+          {dexes.map(d => {
+            const level = LEVELS[Math.min(LEVELS.length - 1, Math.floor(d.xp / 100))];
+            return (
+              <div key={d.id} className="dex">
+                <h2>{d.name}</h2>
+                <p>{d.type} • {level}</p>
+
+                <div className="bar">
+                  <div className="fill" style={{ width: (d.xp % 100) + "%" }} />
+                </div>
+
+                <button onClick={() => addXP(d.id, 10)}>+ XP</button>
+
+                <input
+                  placeholder="Capture moment"
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && e.target.value.trim()) {
+                      addXP(d.id, 5, e.target.value);
+                      e.target.value = "";
+                    }
+                  }}
+                />
+              </div>
+            );
+          })}
+
+          <div className="actions">
+            <button onClick={() => setDexes(dexes.map(d => ({...d,xp:0})))}>Reset ALL Dex XP</button>
+            <button className="danger" onClick={() => setDexes([])}>Reset Entire LifeDex</button>
+          </div>
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+  </script>
+</body>
+</html>
