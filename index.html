@@ -1,172 +1,286 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>LifeDex</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<title>LifeDex</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- React + ReactDOM -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <!-- Babel for JSX -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+body{
+  margin:0;
+  background:radial-gradient(#0b1220,#05080f);
+  font-family:system-ui,-apple-system;
+  color:white;
+}
+#root{max-width:420px;margin:auto;padding:18px}
+h1{margin:0;font-size:28px}
+.muted{color:#9ca3af;font-size:13px}
+.card{
+  background:linear-gradient(180deg,#111827,#05080f);
+  border-radius:18px;
+  padding:14px;
+  margin:12px 0;
+  border:1px solid rgba(255,255,255,0.08)
+}
+.banner{border-radius:14px;padding:10px;margin-bottom:8px}
+.bar{height:10px;border-radius:999px;background:#222;overflow:hidden}
+.fill {
+  height:100%;
+  background:linear-gradient(90deg,#22c55e,#38bdf8);
+  transition: width .6s cubic-bezier(.2,.8,.2,1);
+}
 
-  <style>
-    body {
-      margin: 0;
-      background: radial-gradient(#0b1220, #05080f);
-      font-family: system-ui, sans-serif;
-      color: white;
-    }
-    #root {
-      max-width: 420px;
-      margin: auto;
-      padding: 20px;
-    }
-    h1 { font-size: 32px; margin-bottom: 4px; }
-    .undo {
-      background: gold;
-      padding: 12px 20px;
-      border-radius: 30px;
-      border: none;
-      margin: 12px 0;
-      font-weight: bold;
-    }
-    .dex {
-      background: linear-gradient(180deg,#101827,#05080f);
-      border-radius: 18px;
-      padding: 16px;
-      margin: 16px 0;
-      animation: slideUp .35s ease;
-    }
-    .bar {
-      background: #222;
-      border-radius: 10px;
-      height: 8px;
-      overflow: hidden;
-      margin: 8px 0;
-    }
-    .fill {
-      height: 100%;
-      background: linear-gradient(90deg,#00ff88,#00bbff);
-      transition: width .3s ease;
-    }
-    button {
-      background: orange;
-      border: none;
-      padding: 10px 14px;
-      border-radius: 20px;
-      font-weight: bold;
-    }
-    input {
-      width: 100%;
-      padding: 10px;
-      border-radius: 10px;
-      border: none;
-      margin-top: 6px;
-    }
-    .danger { background: red; color: white; }
-    .actions { display: flex; gap: 10px; margin-top: 20px; }
-    @keyframes slideUp {
-      from { transform: translateY(20px); opacity: 0 }
-      to { transform: translateY(0); opacity: 1 }
-    }
-  </style>
+button{
+  padding:10px 14px;
+  border-radius:14px;
+  border:none;
+  font-weight:700;
+  cursor:pointer
+}
+.btn{background:#fbbf24;color:#0b1220}
+.btn2{background:#1f2937;color:white}
+.btnDanger{background:#7f1d1d;color:white}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+textarea{width:100%;padding:10px;border-radius:10px;border:none;margin-top:8px}
+.back{
+  width:100%;
+  background:linear-gradient(90deg,#fbbf24,#fb923c);
+  color:black;
+  margin-bottom:12px
+}
+.pillRow{display:flex;gap:8px;margin:10px 0}
+.pill{padding:6px 10px;border-radius:999px;background:#111;color:white;font-size:12px;cursor:pointer}
+.pill.active{background:#fbbf24;color:black}
+.logItem{
+  border-radius:14px;
+  padding:10px;
+  margin:8px 0;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.04)
+}
+.skill { background: linear-gradient(90deg,#16a34a33,#22c55e22); }
+.career { background: linear-gradient(90deg,#2563eb33,#38bdf822); }
+.trait { background: linear-gradient(90deg,#7c3aed33,#a78bfa22); }
+.hobby { background: linear-gradient(90deg,#ea580c33,#fb923c22); }
+</style>
 </head>
 
 <body>
-  <div id="root"></div>
+<div id="root"></div>
 
-  <script type="text/babel">
+<script type="text/babel">
+const LEVELS = ["Beginner","Practitioner","Advanced","Expert","Master"];
+const XP_STEP = 100;
+const MAX_HISTORY = 20;
+const MAX_TIMELINE = 200;
 
-    const clickSound = new Audio("https://assets.mixkit.co/sfx/preview/mixkit-game-click-1114.mp3");
-    const xpSound = new Audio("https://assets.mixkit.co/sfx/preview/mixkit-achievement-bell-600.mp3");
-    const LEVELS = ["Beginner","Practitioner","Advanced","Expert","Master"];
+function App() {
 
-    function App() {
-      const [dexes, setDexes] = React.useState(() => {
-        const saved = localStorage.getItem("lifedex_single");
-        return saved ? JSON.parse(saved) : [
-          { id: 1, name: "LifeDoc", type: "Skill", xp: 95, moments: [] },
-          { id: 2, name: "BlueCollar Trades", type: "Career", xp: 20, moments: [] },
-          { id: 3, name: "Reliability", type: "Trait", xp: 40, moments: [] },
-          { id: 4, name: "Artistry", type: "Hobby", xp: 5, moments: [] }
-        ];
-      });
+  const [screen,setScreen] = React.useState("home");
+  const [active,setActive] = React.useState(null);
+  const [journal,setJournal] = React.useState("");
+  const [filter,setFilter] = React.useState("All");
 
-      const [history, setHistory] = React.useState([]);
+  const [state,setState] = React.useState(() => ({
+    dexes:[
+      {id:1,name:"LifeDoc",type:"Skill",xp:95,log:[]},
+      {id:2,name:"BlueCollar Trades",type:"Career",xp:20,log:[]},
+      {id:3,name:"Reliability",type:"Trait",xp:40,log:[]},
+      {id:4,name:"Artistry",type:"Hobby",xp:5,log:[]}
+    ],
+    timeline:[],
+    history:[]
+  }));
 
-      React.useEffect(() => {
-        localStorage.setItem("lifedex_single", JSON.stringify(dexes));
-      }, [dexes]);
+  function pushHistory(s){
+    return [...s.history, { dexes:s.dexes, timeline:s.timeline }].slice(-MAX_HISTORY);
+  }
 
-      const snapshot = () =>
-        setHistory(h => [...h, JSON.parse(JSON.stringify(dexes))]);
+  function commit(mutator){
+    setState(prev => {
+      const dexes = prev.dexes.map(d => ({ ...d, log:[...d.log] }));
+      const timeline = [...prev.timeline];
 
-      const addXP = (id, amount, note) => {
-        snapshot();
-        xpSound.play();
-        setDexes(d =>
-          d.map(x =>
-            x.id === id
-              ? { ...x, xp: Math.max(0, x.xp + amount),
-                  moments: note ? [...x.moments, note] : x.moments }
-              : x
-          )
-        );
+      mutator({ dexes, timeline });
+
+      return {
+        dexes,
+        timeline,
+        history: pushHistory(prev)
       };
+    });
+  }
 
-      const undo = () => {
-        if (!history.length) return;
-        clickSound.play();
-        setDexes(history.at(-1));
-        setHistory(h => h.slice(0, -1));
+  function undo(){
+    setState(s=>{
+      if(!s.history.length) return s;
+      const last = s.history[s.history.length-1];
+      return {
+        dexes:last.dexes,
+        timeline:last.timeline,
+        history:s.history.slice(0,-1)
       };
+    });
+  }
 
-      return (
-        <>
-          <h1>LifeDex</h1>
-          <p>Your life, indexed.</p>
+  function addXP(id,amt,text,kind){
+    commit(store=>{
+      const d = store.dexes.find(x=>x.id===id);
+      if(!d) return;
 
-          <button className="undo" onClick={undo}>↩ Undo Last Action</button>
+      d.xp += amt;
 
-          {dexes.map(d => {
-            const level = LEVELS[Math.min(LEVELS.length - 1, Math.floor(d.xp / 100))];
-            return (
-              <div key={d.id} className="dex">
-                <h2>{d.name}</h2>
-                <p>{d.type} • {level}</p>
+      if(text){
+        const entry = { text, xp:amt, kind };
+        d.log.push(entry);
+        store.timeline.unshift({ dex:d.name, ...entry });
+        store.timeline.splice(MAX_TIMELINE);
+      }
+    });
+  }
 
-                <div className="bar">
-                  <div className="fill" style={{ width: (d.xp % 100) + "%" }} />
-                </div>
+  function resetDex(id){
+    commit(store=>{
+      const d = store.dexes.find(x=>x.id===id);
+      if(d){ d.xp=0; d.log=[]; }
+    });
+  }
 
-                <button onClick={() => addXP(d.id, 10)}>+ XP</button>
+  function deleteDex(id){
+    commit(store=>{
+      store.dexes = store.dexes.filter(d=>d.id!==id);
+    });
+    setScreen("home");
+  }
 
-                <input
-                  placeholder="Capture moment"
-                  onKeyDown={e => {
-                    if (e.key === "Enter" && e.target.value.trim()) {
-                      addXP(d.id, 5, e.target.value);
-                      e.target.value = "";
-                    }
-                  }}
-                />
-              </div>
-            );
-          })}
+  /* ------------------- UI ------------------- */
 
-          <div className="actions">
-            <button onClick={() => setDexes(dexes.map(d => ({...d,xp:0})))}>Reset ALL Dex XP</button>
-            <button className="danger" onClick={() => setDexes([])}>Reset Entire LifeDex</button>
+  if(screen==="details"){
+    const d = state.dexes.find(x=>x.id===active);
+    if(!d) return <button className="back" onClick={()=>setScreen("home")}>Back</button>;
+    const lvl = LEVELS[Math.floor(d.xp/XP_STEP)] || "Master";
+
+    return <>
+      <button className="back" onClick={()=>setScreen("home")}>Back</button>
+
+      <div className="card">
+        <div className={`banner ${d.type.toLowerCase()}`}>
+          <h1>{d.name}</h1>
+          <div className="muted">{d.type} • {lvl}</div>
+          <div className="bar">
+            <div className="fill" style={{width:(d.xp%100)+"%"}}/>
           </div>
-        </>
+        </div>
+
+        <div className="row">
+          <button className="btn" onClick={()=>addXP(d.id,10)}>+10 XP</button>
+          <button className="btn2" onClick={()=>addXP(d.id,-5)}>-5 XP</button>
+          <button className="btn2" onClick={undo}>Undo</button>
+        </div>
+      </div>
+
+      <div className="card">
+        <textarea
+          placeholder="Capture moment..."
+          onKeyDown={e=>{
+            if(e.key==="Enter"){
+              addXP(d.id,5,e.target.value,"capture");
+              e.target.value="";
+            }
+          }}
+        />
+      </div>
+
+      <div className="card row">
+        <button className="btnDanger" onClick={()=>resetDex(d.id)}>Reset</button>
+        <button className="btnDanger" onClick={()=>deleteDex(d.id)}>Delete</button>
+      </div>
+
+      <div className="card">
+        {d.log.slice().reverse().map((l,i)=>(
+          <div key={i} className="logItem">
+            <b>{l.kind}</b> +{l.xp} XP
+            <div>{l.text}</div>
+          </div>
+        ))}
+      </div>
+    </>;
+  }
+
+  if(screen==="journal"){
+    return <>
+      <button className="back" onClick={()=>setScreen("home")}>Back</button>
+      <div className="card">
+        <textarea value={journal} onChange={e=>setJournal(e.target.value)}/>
+        <button className="btn" onClick={()=>{
+          addXP(active,5,journal,"journal");
+          setJournal("");
+          setScreen("timeline");
+        }}>Save Journal</button>
+      </div>
+    </>;
+  }
+
+  if(screen==="timeline"){
+    return <>
+      <div className="pillRow">
+        {["All","Skill","Career","Trait","Hobby"].map(t=>(
+          <div
+            key={t}
+            className={`pill ${filter===t?"active":""}`}
+            onClick={()=>setFilter(t)}
+          >
+            {t}
+          </div>
+        ))}
+      </div>
+
+      <button className="back" onClick={()=>setScreen("home")}>Back</button>
+
+      {state.timeline
+        .filter(t => filter==="All" || t.kind===filter.toLowerCase())
+        .map((t,i)=>(
+          <div key={i} className="card">
+            <b>{t.dex}</b> • {t.kind} • +{t.xp} XP
+            <div>{t.text}</div>
+          </div>
+        ))}
+    </>;
+  }
+
+  return <>
+    <h1>LifeDex</h1>
+    <div className="muted">Your life, indexed.</div>
+
+    {state.dexes.map(d=>{
+      const lvl = LEVELS[Math.floor(d.xp/XP_STEP)] || "Master";
+      return (
+        <div key={d.id} className="card">
+          <div className={`banner ${d.type.toLowerCase()}`}>
+            <h2>{d.name}</h2>
+            <div className="muted">{d.type} • {lvl}</div>
+            <div className="bar">
+              <div className="fill" style={{width:(d.xp%100)+"%"}}/>
+            </div>
+          </div>
+
+          <div className="row">
+            <button className="btn" onClick={()=>{setActive(d.id);setScreen("details")}}>Details</button>
+            <button className="btn2" onClick={()=>{setActive(d.id);setScreen("journal")}}>Journal</button>
+            <button className="btn2" onClick={()=>setScreen("timeline")}>Timeline</button>
+          </div>
+        </div>
       );
-    }
+    })}
+  </>;
+}
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 
-  </script>
+</script>
 </body>
 </html>
