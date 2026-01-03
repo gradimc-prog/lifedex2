@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LifeDex</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<style>
+body{
+  margin:0;
+  background:radial-gradient(#0b1220,#05080f);
+  font-family:system-ui,-apple-system;
+  color:white;
+}
+#root{max-width:420px;margin:auto;padding:18px}
+h1{margin:0;font-size:28px}
+h2{margin:0 0 6px 0}
+.muted{color:#9ca3af;font-size:13px}
+
+.card{
+  background:linear-gradient(180deg,#111827,#05080f);
+  border-radius:18px;
+  padding:14px;
+  margin:12px 0;
+  border:1px solid rgba(255,255,255,0.08)
+}
+.banner{border-radius:14px;padding:10px;margin-bottom:8px}
+
+.bar{height:10px;border-radius:999px;background:#222;overflow:hidden}
+.fill{
+  height:100%;
+  background:linear-gradient(90deg,#22c55e,#38bdf8);
+  transition: width .6s cubic-bezier(.2,.8,.2,1);
+}
+
+button{
+  padding:10px 14px;
+  border-radius:14px;
+  border:none;
+  font-weight:700;
+  cursor:pointer
+}
+.btn{background:#fbbf24;color:#0b1220}
+.btn2{background:#1f2937;color:white}
+.btnDanger{background:#7f1d1d;color:white}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+
+textarea,input,select{
+  width:100%;
+  padding:10px;
+  border-radius:10px;
+  border:none;
+  margin-top:8px;
+  background:rgba(255,255,255,.06);
+  color:white;
+  outline:none;
+}
+textarea{resize:vertical; min-height:90px}
+
+.back{
+  width:100%;
+  background:linear-gradient(90deg,#fbbf24,#fb923c);
+  color:black;
+  margin-bottom:12px
+}
+
+.pillRow{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}
+.pill{
+  padding:6px 10px;border-radius:999px;background:#111;color:white;
+  font-size:12px;cursor:pointer;border:1px solid rgba(255,255,255,.08);
+  user-select:none;
+}
+.pill.active{background:#fbbf24;color:black}
+
+.logItem{
+  border-radius:14px;
+  padding:10px;
+  margin:8px 0;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.04)
+}
+
+.skill { background: linear-gradient(90deg,#16a34a33,#22c55e22); }
+.career { background: linear-gradient(90deg,#2563eb33,#38bdf822); }
+.trait { background: linear-gradient(90deg,#7c3aed33,#a78bfa22); }
+.hobby { background: linear-gradient(90deg,#ea580c33,#fb923c22); }
+
+.smallNote{font-size:12px;color:#9ca3af;margin-top:8px}
+hr.sep{border:none;border-top:1px solid rgba(255,255,255,.08); margin:12px 0}
+</style>
+</head>
+
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const LEVELS = ["Beginner","Practitioner","Advanced","Expert","Master"];
+const XP_STEP = 100;
+const MAX_HISTORY = 30;
+const MAX_TIMELINE = 300;
+const STORAGE_KEY = "lifedex_v2";
+
+function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+function safeUUID(){
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  return "id_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
+}
+function deepClone(obj){
+  // JSON-safe structure (our state is JSON-safe)
+  return JSON.parse(JSON.stringify(obj));
+}
+
+function normalizeLoaded(parsed){
+  if(!parsed || typeof parsed !== "object") return null;
+  const dexes = Array.isArray(parsed.dexes) ? parsed.dexes : [];
+  const timeline = Array.isArray(parsed.timeline) ? parsed.timeline : [];
+  return {
+    dexes: dexes.map(d => ({
+      id: d.id || safeUUID(),
+      name: String(d.name || "Untitled"),
+      type: ["Skill","Career","Trait","Hobby"].includes(d.type) ? d.type : "Skill",
+      xp: Number(d.xp) || 0,
+      log: Array.isArray(d.log) ? d.log.map(e => ({
+        text: String(e.text || ""),
+        xp: Number(e.xp) || 0,
+        entryType: e.entryType || e.type || "note",
+        ts: Number(e.ts) || Date.now()
+      })) : []
+    })),
+    timeline: timeline.map(t => ({
+      dexId: t.dexId || null,
+      dex: String(t.dex || ""),
+      dexType: ["Skill","Career","Trait","Hobby"].includes(t.dexType) ? t.dexType : "Skill",
+      entryType: t.entryType || t.kind || "note",
+      xp: Number(t.xp) || 0,
+      text: String(t.text || ""),
+      ts: Number(t.ts) || Date.now()
+    }))
+  };
+}
+
+function App(){
+  const [screen,setScreen] = React.useState("home"); // home|details|journal|timeline|dexForm
+  const [active,setActive] = React.useState(null);  // active dex id
+  const [filter,setFilter] = React.useState("All"); // All|Skill|Career|Trait|Hobby
+
+  const [journal,setJournal] = React.useState("");
+
+  // Dex form state
+  const [formMode, setFormMode] = React.useState("create"); // create|edit
+  const [formId, setFormId] = React.useState(null);
+  const [formName, setFormName] = React.useState("");
+  const [formType, setFormType] = React.useState("Skill");
+
+  const [state,setState] = React.useState(() => {
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){
+        const parsed = JSON.parse(raw);
+        const norm = normalizeLoaded(parsed);
+        if(norm){
+          return { dexes:norm.dexes, timeline:norm.timeline, history:[] };
+        }
+      }
+    }catch(e){}
+    // default seed
+    return {
+      dexes:[
+        {id:safeUUID(),name:"LifeDoc",type:"Skill",xp:95,log:[]},
+        {id:safeUUID(),name:"BlueCollar Trades",type:"Career",xp:20,log:[]},
+        {id:safeUUID(),name:"Reliability",type:"Trait",xp:40,log:[]},
+        {id:safeUUID(),name:"Artistry",type:"Hobby",xp:5,log:[]}
+      ],
+      timeline:[],
+      history:[]
+    };
+  });
+
+  // autosave (dexes + timeline only)
+  React.useEffect(() => {
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ dexes: state.dexes, timeline: state.timeline }));
+    }catch(e){}
+  }, [state.dexes, state.timeline]);
+
+  // Navigation safety: if active dex disappears, go home
+  React.useEffect(() => {
+    if (screen === "details" || screen === "journal") {
+      const exists = state.dexes.some(d => d.id === active);
+      if (!exists) {
+        setScreen("home");
+        setActive(null);
+      }
+    }
+  }, [screen, active, state.dexes]);
+
+  function pushHistory(prev){
+    const snap = deepClone({ dexes: prev.dexes, timeline: prev.timeline });
+    return [...prev.history, snap].slice(-MAX_HISTORY);
+  }
+
+  function commit(mutator){
+    setState(prev => {
+      const draft = deepClone({ dexes: prev.dexes, timeline: prev.timeline });
+      mutator(draft);
+      return {
+        dexes: draft.dexes,
+        timeline: draft.timeline.slice(0, MAX_TIMELINE),
+        history: pushHistory(prev)
+      };
+    });
+  }
+
+  function undo(){
+    setState(s => {
+      if(!s.history.length) return s;
+      const last = s.history[s.history.length-1];
+      return {
+        dexes: deepClone(last.dexes),
+        timeline: deepClone(last.timeline),
+        history: s.history.slice(0,-1)
+      };
+    });
+  }
+
+  function levelFromXP(xp){
+    const idx = clamp(Math.floor((xp||0)/XP_STEP), 0, LEVELS.length-1);
+    return LEVELS[idx];
+  }
+  function progressPercent(xp){
+    const v = ((xp||0)%XP_STEP + XP_STEP) % XP_STEP;
+    return (v/XP_STEP)*100;
+  }
+
+  function addXP(dexId, amt, text="", entryType="xp"){
+    commit(draft => {
+      const d = draft.dexes.find(x => x.id === dexId);
+      if(!d) return;
+
+      const before = d.xp || 0;
+      const after = Math.max(0, before + (Number(amt)||0));
+      const delta = after - before;
+      d.xp = after;
+
+      if(text && String(text).trim().length){
+        const entry = {
+          text: String(text).trim(),
+          xp: delta,
+          entryType,
+          ts: Date.now()
+        };
+        d.log = Array.isArray(d.log) ? d.log : [];
+        d.log.push(entry);
+
+        draft.timeline.unshift({
+          dexId: d.id,
+          dex: d.name,
+          dexType: d.type,
+          entryType,
+          xp: entry.xp,
+          text: entry.text,
+          ts: entry.ts
+        });
+      }
+    });
+  }
+
+  function resetDex(dexId){
+    commit(draft => {
+      const d = draft.dexes.find(x => x.id === dexId);
+      if(!d) return;
+      d.xp = 0;
+      d.log = [];
+    });
+  }
+
+  function deleteDex(dexId){
+    commit(draft => {
+      draft.dexes = draft.dexes.filter(d => d.id !== dexId);
+      // keep timeline history (optional). If you want delete to remove timeline too, uncomment:
+      // draft.timeline = draft.timeline.filter(t => t.dexId !== dexId);
+    });
+    setActive(null);
+    setScreen("home");
+  }
+
+  function resetAll(){
+    commit(draft => {
+      draft.dexes.forEach(d => { d.xp = 0; d.log = []; });
+      draft.timeline = [];
+    });
+    try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+    setActive(null);
+    setScreen("home");
+  }
+
+  // ----- Create/Edit Dex -----
+  function openCreateDex(){
+    setFormMode("create");
+    setFormId(null);
+    setFormName("");
+    setFormType("Skill");
+    setScreen("dexForm");
+  }
+
+  function openEditDex(d){
+    setFormMode("edit");
+    setFormId(d.id);
+    setFormName(d.name);
+    setFormType(d.type);
+    setScreen("dexForm");
+  }
+
+  function saveDex(){
+    const name = String(formName||"").trim();
+    const type = ["Skill","Career","Trait","Hobby"].includes(formType) ? formType : "Skill";
+    if(!name) return;
+
+    commit(draft => {
+      if(formMode === "create"){
+        draft.dexes.push({ id: safeUUID(), name, type, xp: 0, log: [] });
+      }else{
+        const d = draft.dexes.find(x => x.id === formId);
+        if(d){
+          d.name = name;
+          d.type = type;
+          // XP preserved (your choice A)
+        }
+      }
+    });
+
+    setScreen("home");
+  }
+
+  // ------------------- SCREENS -------------------
+
+  if(screen === "dexForm"){
+    return (
+      <>
+        <button className="back" onClick={()=>setScreen("home")}>Back</button>
+        <div className="card">
+          <h2>{formMode === "create" ? "Create Dex" : "Edit Dex"}</h2>
+          <div className="muted">XP is preserved when editing.</div>
+
+          <input
+            value={formName}
+            onChange={e=>setFormName(e.target.value)}
+            placeholder="Dex name (e.g., Gym, Coding, Cooking)"
+          />
+
+          <select value={formType} onChange={e=>setFormType(e.target.value)}>
+            <option>Skill</option>
+            <option>Career</option>
+            <option>Trait</option>
+            <option>Hobby</option>
+          </select>
+
+          <div className="row" style={{marginTop:10}}>
+            <button className="btn" onClick={saveDex}>Save</button>
+            <button className="btn2" onClick={()=>setScreen("home")}>Cancel</button>
+          </div>
+
+          <div className="smallNote">
+            Tip: Choose the type so Timeline filters work properly.
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if(screen === "details"){
+    const d = state.dexes.find(x => x.id === active);
+    if(!d) return null;
+
+    const lvl = levelFromXP(d.xp);
+    const pct = progressPercent(d.xp);
+
+    return (
+      <>
+        <button className="back" onClick={()=>setScreen("home")}>Back</button>
+
+        <div className="card">
+          <div className={`banner ${d.type.toLowerCase()}`}>
+            <h1>{d.name}</h1>
+            <div className="muted">{d.type} • {lvl} • {d.xp} XP</div>
+            <div className="bar"><div className="fill" style={{width:pct+"%"}}/></div>
+          </div>
+
+          <div className="row">
+            <button className="btn" onClick={()=>addXP(d.id,10)}>+10 XP</button>
+            <button className="btn2" onClick={()=>addXP(d.id,-5)}>-5 XP</button>
+            <button className="btn2" onClick={undo}>Undo</button>
+            <button className="btn2" onClick={()=>{setFilter("All");setScreen("timeline");}}>Timeline</button>
+          </div>
+
+          <div className="smallNote">
+            Capture and Journal entries add XP and appear in Timeline.
+          </div>
+        </div>
+
+        <div className="card">
+          <b>Capture moment</b>
+          <textarea
+            placeholder="Type and press Enter to save..."
+            onKeyDown={(e)=>{
+              if(e.key === "Enter" && !e.shiftKey){
+                e.preventDefault();
+                const val = e.currentTarget.value;
+                if(val.trim()){
+                  addXP(d.id,5,val,"capture");
+                  e.currentTarget.value="";
+                }
+              }
+            }}
+          />
+          <div className="smallNote">Enter saves. Shift+Enter makes a new line.</div>
+        </div>
+
+        <div className="card row">
+          <button className="btn2" onClick={()=>openEditDex(d)}>Edit Dex</button>
+          <button className="btnDanger" onClick={()=>resetDex(d.id)}>Reset</button>
+          <button className="btnDanger" onClick={()=>deleteDex(d.id)}>Delete</button>
+        </div>
+
+        <div className="card">
+          <b>Entries</b>
+          {(d.log||[]).length === 0 && <div className="smallNote">No entries yet.</div>}
+          {(d.log||[]).slice().reverse().map((l,i)=>(
+            <div key={i} className="logItem">
+              <b>{l.entryType}</b> {l.xp>=0?`+${l.xp}`:l.xp} XP
+              <div>{l.text}</div>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  if(screen === "journal"){
+    const d = state.dexes.find(x => x.id === active);
+    if(!d) return null;
+
+    return (
+      <>
+        <button className="back" onClick={()=>setScreen("home")}>Back</button>
+
+        <div className="card">
+          <div className={`banner ${d.type.toLowerCase()}`}>
+            <h2>{d.name}</h2>
+            <div className="muted">Journal • {d.type}</div>
+          </div>
+
+          <textarea
+            value={journal}
+            onChange={e=>setJournal(e.target.value)}
+            placeholder="Write your journal entry..."
+          />
+
+          <div className="row" style={{marginTop:10}}>
+            <button className="btn" onClick={()=>{
+              if(!journal.trim()) return;
+              addXP(d.id,5,journal,"journal");
+              setJournal("");
+              setFilter("All");
+              setScreen("timeline");
+            }}>
+              Save Journal (+5 XP)
+            </button>
+            <button className="btn2" onClick={undo}>Undo</button>
+          </div>
+
+          <div className="smallNote">Journal saves to Timeline under the correct Dex type.</div>
+        </div>
+      </>
+    );
+  }
+
+  if(screen === "timeline"){
+    const items = state.timeline.filter(t => filter === "All" || t.dexType === filter);
+
+    return (
+      <>
+        <div className="pillRow">
+          {["All","Skill","Career","Trait","Hobby"].map(t=>(
+            <div
+              key={t}
+              className={`pill ${filter===t?"active":""}`}
+              onClick={()=>setFilter(t)}
+            >
+              {t}
+            </div>
+          ))}
+        </div>
+
+        <button className="back" onClick={()=>setScreen("home")}>Back</button>
+
+        <div className="card">
+          <div className="row" style={{justifyContent:"space-between"}}>
+            <b>Timeline</b>
+            <button className="btn2" onClick={undo}>Undo</button>
+          </div>
+          <div className="smallNote">Filter is by Dex type (Skill/Career/Trait/Hobby).</div>
+        </div>
+
+        {items.length === 0 && (
+          <div className="card">
+            <b>No entries yet.</b>
+            <div className="smallNote">Add a Capture or Journal entry to populate Timeline.</div>
+          </div>
+        )}
+
+        {items.map((t,i)=>(
+          <div key={i} className={`card ${String(t.dexType||"Skill").toLowerCase()}`}>
+            <b>{t.dex}</b> • {t.dexType} • {t.entryType} • {t.xp>=0?`+${t.xp}`:t.xp} XP
+            <div style={{marginTop:6}}>{t.text}</div>
+          </div>
+        ))}
+      </>
+    );
+  }
+
+  // HOME
+  return (
+    <>
+      <h1>LifeDex</h1>
+      <div className="muted">Your life, indexed.</div>
+
+      <div className="card row">
+        <button className="btn" onClick={openCreateDex}>+ New Dex</button>
+        <button className="btn2" onClick={()=>{setFilter("All");setScreen("timeline");}}>Timeline</button>
+        <button className="btn2" onClick={undo}>Undo</button>
+        <button className="btnDanger" onClick={resetAll}>Reset All</button>
+      </div>
+
+      {state.dexes.map(d=>{
+        const lvl = levelFromXP(d.xp);
+        const pct = progressPercent(d.xp);
+
+        return (
+          <div key={d.id} className="card">
+            <div className={`banner ${d.type.toLowerCase()}`}>
+              <h2>{d.name}</h2>
+              <div className="muted">{d.type} • {lvl} • {d.xp} XP</div>
+              <div className="bar"><div className="fill" style={{width:pct+"%"}}/></div>
+            </div>
+
+            <div className="row">
+              <button className="btn" onClick={()=>{setActive(d.id);setScreen("details");}}>Details</button>
+              <button className="btn2" onClick={()=>{setActive(d.id);setScreen("journal");}}>Journal</button>
+              <button className="btn2" onClick={()=>openEditDex(d)}>Edit</button>
+              <button className="btn2" onClick={()=>{setFilter("All");setScreen("timeline");}}>Timeline</button>
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
