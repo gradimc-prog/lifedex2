@@ -1,5 +1,6 @@
 import React from "https://esm.sh/react@18.3.1";
 import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
+import "./styles.css";
 // @ts-nocheck
 // ==== File Storage Engine (IndexedDB) ====
 const DB_NAME = "LifeDexFiles";
