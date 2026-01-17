@@ -838,13 +838,13 @@ function triggerXpFx(dexId, delta, dexType) {
         const seeded = defaultSeed();
         return { dexes: seeded.dexes, timeline: seeded.timeline, history: [], version: seeded.version };
     });
-    const dexList = Array.isArray(state.dexes) ? state.dexes : [];
+    const dexes = Array.isArray(state.dexes) ? state.dexes : [];
     const timeline = Array.isArray(state.timeline) ? state.timeline : [];
     React.useEffect(() => {
         if (!SAVE_LOCK) {
-            scheduleSave({ version: state.version || SCHEMA_VERSION, dexes: dexList, timeline });
+            scheduleSave({ version: state.version || SCHEMA_VERSION, dexes, timeline });
         }
-    }, [dexList, timeline, state.version]);
+    }, [dexes, timeline, state.version]);
 
     const achievementToastRef = React.useRef({ ready:false, ids:new Set() });
 
@@ -866,7 +866,7 @@ function triggerXpFx(dexId, delta, dexType) {
             }
         }
         ref.ids = new Set(now);
-    }, [dexList, timeline]);
+    }, [dexes, timeline]);
 
     // ---- Phase 3 observers (do NOT modify core XP/timeline logic) ----
     React.useEffect(() => {
@@ -878,7 +878,7 @@ function triggerXpFx(dexId, delta, dexType) {
         }
 
         // Detect total XP deltas (captures quick +10/-5 that don't write timeline)
-        const total = totalXPFromDexes(dexList);
+        const total = totalXPFromDexes(dexes);
         if (prevTotalRef.current === null) {
             prevTotalRef.current = total;
         } else {
@@ -897,7 +897,7 @@ function triggerXpFx(dexId, delta, dexType) {
         // Level-up toasts (compare level indexes per dex)
         const prevLv = prevLevelsRef.current || {};
         const nextLv = {};
-        for (const d of dexList) {
+        for (const d of dexes) {
             const idx = levelIndexFromXP(d.xp);
             nextLv[d.id] = idx;
             const before = prevLv[d.id];
@@ -917,17 +917,17 @@ function triggerXpFx(dexId, delta, dexType) {
         for (const sm of streakMilestones) {
             if (prevStreak < sm && streak >= sm) pushToast(`Streak: ${sm} days`);
         }
-    }, [dexList, timeline]);
+    }, [dexes, timeline]);
 
     React.useEffect(() => {
         if (screen === "details" || screen === "journal") {
-            const exists = dexList.some(d => d.id === active);
+            const exists = dexes.some(d => d.id === active);
             if (!exists) {
                 setScreen("home");
                 setActive(null);
             }
         }
-    }, [screen, active, dexList]);
+    }, [screen, active, dexes]);
     function stripHeavy(snap){
   const clean = deepClone(snap);
 
@@ -1003,7 +1003,7 @@ function commit(mutator) {
     }
 // ---- Core actions ----
     function addXP(dexId, amt, text = "", entryType = "xp", meta = {}) {
-        const dNow = dexList.find(x => x.id === dexId);
+        const dNow = dexes.find(x => x.id === dexId);
         if (dNow) {
             const before = safeNumber(dNow.xp, 0);
             const semanticBonus = analyzeTextXP(text);
@@ -1177,7 +1177,7 @@ function deleteDex(dexId) {
     }
     // ----- Export/Import actions -----
     function exportSave() {
-        const payload = repairState({ version: state.version || SCHEMA_VERSION, dexes: dexList, timeline });
+        const payload = repairState({ version: state.version || SCHEMA_VERSION, dexes, timeline });
         payload.version = SCHEMA_VERSION;
         downloadJSON("lifedex-save.json", payload);
         Sound.play("export");
@@ -1222,7 +1222,7 @@ function deleteDex(dexId) {
                 React.createElement("div", { className: "smallNote" }, "Tip: Choose the type so Timeline filters work properly."))));
     }
     if (screen === "details") {
-        const d = dexList.find(x => x.id === active);
+        const d = dexes.find(x => x.id === active);
         if (!d)
             return null;
         const lvl = levelFromXP(d.xp);
@@ -1307,7 +1307,7 @@ function deleteDex(dexId) {
                     React.createElement("div", null, l.text)))))));
     }
     if (screen === "journal") {
-        const d = dexList.find(x => x.id === active);
+        const d = dexes.find(x => x.id === active);
         if (!d)
             return null;
         return (React.createElement(React.Fragment, null,
@@ -1485,7 +1485,7 @@ function deleteDex(dexId) {
     // CAREER TREE
     if (screen === "careerTree") {
         const dexId = active;
-        const dex = dexList.find(d => d.id === dexId);
+        const dex = dexes.find(d => d.id === dexId);
         if (!dex) {
             return React.createElement(React.Fragment, null,
                 React.createElement("button", { className: "back", onClick: () => setScreen("home") }, "Back"),
@@ -1635,7 +1635,7 @@ function deleteDex(dexId) {
     // MILESTONES
     if (screen === "milestones") {
         const dexId = active;
-        const dex = dexList.find(d=>d.id===dexId);
+        const dex = dexes.find(d=>d.id===dexId);
         if (!dex || !dex.careerTree) {
             return React.createElement(React.Fragment,null,
                 React.createElement("button",{className:"back",onClick:()=>setScreen("details")},"Back"),
@@ -1680,6 +1680,7 @@ function deleteDex(dexId) {
     const _days = daySetFromTimeline(timeline);
     if (sessionTodayXP !== 0) _days.add(localDayKey(Date.now()));
     const streakDays = computeStreakDaysFromDaySet(_days);
+    const dexes = Array.isArray(state.dexes) ? state.dexes : [];
 
     return (React.createElement(React.Fragment, null,
         React.createElement("h1", null, "LifeDex"),
@@ -1717,13 +1718,13 @@ function deleteDex(dexId) {
                         await importSaveFromFile(file);
                     } })),
         React.createElement("div", { className: "smallNote" }, "Tip: Export before big changes so you can restore instantly.")),
-        dexList.length === 0 && React.createElement("div", { className: "card" },
+        dexes.length === 0 && React.createElement("div", { className: "card" },
             React.createElement("b", null, "No Dexes yet."),
             React.createElement("div", { className: "smallNote" }, "Create your first Dex to begin.")
         ),
 
 
-        dexList.map(d => {
+        dexes.map(d => {
             const lvl = levelFromXP(d.xp);
             const pct = progressPercent(d.xp);
             const nextInfo = xpToNextLevelInfo(d.xp);
