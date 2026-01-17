@@ -1645,6 +1645,7 @@ function deleteDex(dexId) {
     const _days = daySetFromTimeline(state.timeline);
     if (sessionTodayXP !== 0) _days.add(localDayKey(Date.now()));
     const streakDays = computeStreakDaysFromDaySet(_days);
+    const dexes = Array.isArray(state.dexes) ? state.dexes : [];
 
     return (React.createElement(React.Fragment, null,
         React.createElement("h1", null, "LifeDex"),
@@ -1681,14 +1682,14 @@ function deleteDex(dexId) {
                             return;
                         await importSaveFromFile(file);
                     } })),
-            React.createElement("div", { className: "smallNote" }, "Tip: Export before big changes so you can restore instantly.")),
-state.dexes.length === 0 && React.createElement("div", { className: "card" },
-    React.createElement("b", null, "No Dexes yet."),
-    React.createElement("div", { className: "smallNote" }, "Create your first Dex to begin.")
-),
+        React.createElement("div", { className: "smallNote" }, "Tip: Export before big changes so you can restore instantly.")),
+        dexes.length === 0 && React.createElement("div", { className: "card" },
+            React.createElement("b", null, "No Dexes yet."),
+            React.createElement("div", { className: "smallNote" }, "Create your first Dex to begin.")
+        ),
 
 
-state.dexes.map(d => {
+        dexes.map(d => {
             const lvl = levelFromXP(d.xp);
             const pct = progressPercent(d.xp);
             const nextInfo = xpToNextLevelInfo(d.xp);
