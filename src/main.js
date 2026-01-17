@@ -1680,7 +1680,6 @@ function deleteDex(dexId) {
     const _days = daySetFromTimeline(timeline);
     if (sessionTodayXP !== 0) _days.add(localDayKey(Date.now()));
     const streakDays = computeStreakDaysFromDaySet(_days);
-    const dexes = Array.isArray(state.dexes) ? state.dexes : [];
 
     return (React.createElement(React.Fragment, null,
         React.createElement("h1", null, "LifeDex"),
