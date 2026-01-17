@@ -1680,7 +1680,6 @@ function deleteDex(dexId) {
     const _days = daySetFromTimeline(timeline);
     if (sessionTodayXP !== 0) _days.add(localDayKey(Date.now()));
     const streakDays = computeStreakDaysFromDaySet(_days);
-    const dexes = Array.isArray(state.dexes) ? state.dexes : [];
 
     return (React.createElement(React.Fragment, null,
         React.createElement("h1", null, "LifeDex"),
@@ -1757,6 +1756,16 @@ function deleteDex(dexId) {
                     React.createElement("button", { className: "btn2", onClick: () => { setFilter("All"); setScreen("timeline"); } }, "Timeline"))));
         })));
 }
-createRoot(document.getElementById("root")).render(
-    React.createElement(ErrorBoundary, null, React.createElement(App, null))
-);
+const rootEl = document.getElementById("root");
+if (!rootEl) {
+    const fallback = document.createElement("div");
+    fallback.style.padding = "24px";
+    fallback.style.fontFamily = "system-ui, -apple-system, sans-serif";
+    fallback.style.color = "#111827";
+    fallback.textContent = "LifeDex failed to mount: missing #root element.";
+    document.body.appendChild(fallback);
+} else {
+    createRoot(rootEl).render(
+        React.createElement(ErrorBoundary, null, React.createElement(App, null))
+    );
+}
