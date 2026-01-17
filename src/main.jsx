@@ -70,6 +70,39 @@ const MAX_TIMELINE = 300;
 const STORAGE_KEY = "lifedex_v2";
 const SCHEMA_VERSION = 3;
 const DEV = false;
+
+class ErrorBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { error: null };
+        this.handleReset = this.handleReset.bind(this);
+    }
+    static getDerivedStateFromError(error) {
+        return { error };
+    }
+    componentDidCatch(error, info) {
+        console.error("[LifeDex] Render error:", error, info);
+    }
+    handleReset() {
+        try {
+            localStorage.removeItem(STORAGE_KEY);
+        }
+        catch (e) {
+            console.warn("[LifeDex] Failed to clear storage:", e);
+        }
+        window.location.reload();
+    }
+    render() {
+        if (!this.state.error) {
+            return this.props.children;
+        }
+        return React.createElement("div", { className: "card", style: { marginTop: 24 } },
+            React.createElement("h2", null, "Something went wrong"),
+            React.createElement("div", { className: "smallNote" }, "LifeDex ran into an error while rendering. You can clear local data to recover."),
+            React.createElement("pre", { className: "logItem", style: { whiteSpace: "pre-wrap" } }, safeString(this.state.error?.message, "Unknown error")),
+            React.createElement("button", { className: "btnDanger", onClick: this.handleReset }, "Clear saved data and reload"));
+    }
+}
 // --- Sound scaffold (disabled for now; ready later) ---
 const Sound = {
     enabled: false,
@@ -805,11 +838,13 @@ function triggerXpFx(dexId, delta, dexType) {
         const seeded = defaultSeed();
         return { dexes: seeded.dexes, timeline: seeded.timeline, history: [], version: seeded.version };
     });
+    const dexes = Array.isArray(state.dexes) ? state.dexes : [];
+    const timeline = Array.isArray(state.timeline) ? state.timeline : [];
     React.useEffect(() => {
         if (!SAVE_LOCK) {
-            scheduleSave({ version: state.version || SCHEMA_VERSION, dexes: state.dexes, timeline: state.timeline });
+            scheduleSave({ version: state.version || SCHEMA_VERSION, dexes, timeline });
         }
-    }, [state.dexes, state.timeline, state.version]);
+    }, [dexes, timeline, state.version]);
 
     const achievementToastRef = React.useRef({ ready:false, ids:new Set() });
 
@@ -831,7 +866,7 @@ function triggerXpFx(dexId, delta, dexType) {
             }
         }
         ref.ids = new Set(now);
-    }, [state.dexes, state.timeline]);
+    }, [dexes, timeline]);
 
     // ---- Phase 3 observers (do NOT modify core XP/timeline logic) ----
     React.useEffect(() => {
@@ -843,7 +878,7 @@ function triggerXpFx(dexId, delta, dexType) {
         }
 
         // Detect total XP deltas (captures quick +10/-5 that don't write timeline)
-        const total = totalXPFromDexes(state.dexes);
+        const total = totalXPFromDexes(dexes);
         if (prevTotalRef.current === null) {
             prevTotalRef.current = total;
         } else {
@@ -862,7 +897,7 @@ function triggerXpFx(dexId, delta, dexType) {
         // Level-up toasts (compare level indexes per dex)
         const prevLv = prevLevelsRef.current || {};
         const nextLv = {};
-        for (const d of state.dexes) {
+        for (const d of dexes) {
             const idx = levelIndexFromXP(d.xp);
             nextLv[d.id] = idx;
             const before = prevLv[d.id];
@@ -873,7 +908,7 @@ function triggerXpFx(dexId, delta, dexType) {
         prevLevelsRef.current = nextLv;
 
         // Streak milestone toasts (timeline days + session activity today)
-        const days = daySetFromTimeline(state.timeline);
+        const days = daySetFromTimeline(timeline);
         if (sessionTodayXP !== 0) days.add(localDayKey(Date.now()));
         const streak = computeStreakDaysFromDaySet(days);
         const prevStreak = safeNumber(lastToastRef.current.__streakSeen, 0);
@@ -882,17 +917,17 @@ function triggerXpFx(dexId, delta, dexType) {
         for (const sm of streakMilestones) {
             if (prevStreak < sm && streak >= sm) pushToast(`Streak: ${sm} days`);
         }
-    }, [state.dexes, state.timeline]);
+    }, [dexes, timeline]);
 
     React.useEffect(() => {
         if (screen === "details" || screen === "journal") {
-            const exists = state.dexes.some(d => d.id === active);
+            const exists = dexes.some(d => d.id === active);
             if (!exists) {
                 setScreen("home");
                 setActive(null);
             }
         }
-    }, [screen, active, state.dexes]);
+    }, [screen, active, dexes]);
     function stripHeavy(snap){
   const clean = deepClone(snap);
 
@@ -968,7 +1003,7 @@ function commit(mutator) {
     }
 // ---- Core actions ----
     function addXP(dexId, amt, text = "", entryType = "xp", meta = {}) {
-        const dNow = state.dexes.find(x => x.id === dexId);
+        const dNow = dexes.find(x => x.id === dexId);
         if (dNow) {
             const before = safeNumber(dNow.xp, 0);
             const semanticBonus = analyzeTextXP(text);
@@ -1142,7 +1177,7 @@ function deleteDex(dexId) {
     }
     // ----- Export/Import actions -----
     function exportSave() {
-        const payload = repairState({ version: state.version || SCHEMA_VERSION, dexes: state.dexes, timeline: state.timeline });
+        const payload = repairState({ version: state.version || SCHEMA_VERSION, dexes, timeline });
         payload.version = SCHEMA_VERSION;
         downloadJSON("lifedex-save.json", payload);
         Sound.play("export");
@@ -1187,7 +1222,7 @@ function deleteDex(dexId) {
                 React.createElement("div", { className: "smallNote" }, "Tip: Choose the type so Timeline filters work properly."))));
     }
     if (screen === "details") {
-        const d = state.dexes.find(x => x.id === active);
+        const d = dexes.find(x => x.id === active);
         if (!d)
             return null;
         const lvl = levelFromXP(d.xp);
@@ -1272,7 +1307,7 @@ function deleteDex(dexId) {
                     React.createElement("div", null, l.text)))))));
     }
     if (screen === "journal") {
-        const d = state.dexes.find(x => x.id === active);
+        const d = dexes.find(x => x.id === active);
         if (!d)
             return null;
         return (React.createElement(React.Fragment, null,
@@ -1317,7 +1352,7 @@ function deleteDex(dexId) {
                 React.createElement("div", { className: "smallNote" }, "When you save a journal entry, this card pulses to confirm it worked."))));
     }
     if (screen === "timeline") {
-        const items = state.timeline.filter(t => filter === "All" || t.dexType === filter);
+        const items = timeline.filter(t => filter === "All" || t.dexType === filter);
         return (React.createElement(React.Fragment, null,
             React.createElement("div", { className: "pillRow" }, ["All", "Skill", "Career", "Trait", "Hobby"].map(t => (React.createElement("div", { key: t, className: `pill ${filter === t ? "active" : ""}`, onClick: () => setFilter(t) }, t)))),
             React.createElement("button", { className: "back", onClick: () => setScreen("home") }, "Back"),
@@ -1356,7 +1391,7 @@ function deleteDex(dexId) {
         const totalA = aState.length;
         const unlockedCount = unlocked.size;
 
-        const days = daySetFromTimeline(state.timeline);
+        const days = daySetFromTimeline(timeline);
         if (sessionTodayXP !== 0) days.add(localDayKey(Date.now()));
         const streak = computeStreakDaysFromDaySet(days);
 
@@ -1450,7 +1485,7 @@ function deleteDex(dexId) {
     // CAREER TREE
     if (screen === "careerTree") {
         const dexId = active;
-        const dex = state.dexes.find(d => d.id === dexId);
+        const dex = dexes.find(d => d.id === dexId);
         if (!dex) {
             return React.createElement(React.Fragment, null,
                 React.createElement("button", { className: "back", onClick: () => setScreen("home") }, "Back"),
@@ -1600,7 +1635,7 @@ function deleteDex(dexId) {
     // MILESTONES
     if (screen === "milestones") {
         const dexId = active;
-        const dex = state.dexes.find(d=>d.id===dexId);
+        const dex = dexes.find(d=>d.id===dexId);
         if (!dex || !dex.careerTree) {
             return React.createElement(React.Fragment,null,
                 React.createElement("button",{className:"back",onClick:()=>setScreen("details")},"Back"),
@@ -1640,9 +1675,9 @@ function deleteDex(dexId) {
 
 
     // HOME
-    const todayXP = computeTodayXP(state.timeline) + sessionTodayXP;
+    const todayXP = computeTodayXP(timeline) + sessionTodayXP;
     const todayLabel = todayXP >= 0 ? `+${todayXP}` : `${todayXP}`;
-    const _days = daySetFromTimeline(state.timeline);
+    const _days = daySetFromTimeline(timeline);
     if (sessionTodayXP !== 0) _days.add(localDayKey(Date.now()));
     const streakDays = computeStreakDaysFromDaySet(_days);
     const dexes = Array.isArray(state.dexes) ? state.dexes : [];
@@ -1722,4 +1757,6 @@ function deleteDex(dexId) {
                     React.createElement("button", { className: "btn2", onClick: () => { setFilter("All"); setScreen("timeline"); } }, "Timeline"))));
         })));
 }
-createRoot(document.getElementById("root")).render(React.createElement(App, null));
+createRoot(document.getElementById("root")).render(
+    React.createElement(ErrorBoundary, null, React.createElement(App, null))
+);
